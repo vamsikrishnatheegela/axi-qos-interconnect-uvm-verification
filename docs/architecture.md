@@ -29,9 +29,23 @@ AXI4 has five independent channels:
 
 A transfer occurs only on a rising clock edge where VALID and READY are both asserted. A source must hold VALID and payload stable while VALID=1 and READY=0. Channel independence must be preserved; AW and W may arrive in different cycles.
 
-## 4. Design decisions to freeze before RTL
+## 4. Current RTL scope and integration contract
 
-The following choices must be recorded in RTL parameters or a specification before integration:
+The repository currently contains independently tested decoder/arbitration and AR, R, AW, W, and B routing blocks. These are building blocks, not yet an integrated interconnect.
+
+The initial W router intentionally limits each master to **one outstanding write burst**:
+- The top-level reports each accepted AW handshake to the W router using `m_aw_fire` and supplies the accepted address.
+- The W router records the selected destination and asserts `m_aw_block` until the final W beat handshakes.
+- The top-level must suppress further AW requests from a blocked master. Do not connect `m_aw_block` only to a status signal; it must actually gate the AW request path.
+- W data is held off until the matching AW has been accepted.
+- Once a W burst begins, its master owns that destination until an accepted WLAST. W payload is not buffered internally.
+- The design assumes AXI-compliant masters hold WVALID and payload stable while stalled.
+
+This policy is deliberately restrictive; a FIFO-based AW/W association mechanism is required before allowing multiple outstanding write bursts per master.
+
+## 5. Remaining design decisions
+
+The following choices must be recorded in RTL parameters or a specification before full integration:
 
 - Clock/reset polarity and reset behavior.
 - Address width, data width, ID width, and maximum burst length.
@@ -39,8 +53,6 @@ The following choices must be recorded in RTL parameters or a specification befo
 - Address windows for S0 and S1, including unmapped-address behavior.
 - Maximum outstanding reads and writes per master and per slave.
 - Ordering guarantees and ID preservation/remapping policy.
-- Write address/data association and handling of independent AW/W arrival.
-- Arbitration granularity: transaction-level or beat-level, with AXI4 burst rules respected.
 - QoS input interpretation, priority encoding, tie-breaking, and starvation policy.
 - Backpressure buffering and any timing isolation/skid buffers.
 - Error response behavior for invalid addresses.
@@ -48,17 +60,16 @@ The following choices must be recorded in RTL parameters or a specification befo
 
 Do not silently assume that an AXI4 transaction may be arbitrated beat-by-beat between different masters. Once a burst is granted to a destination, the design must preserve the required burst integrity and ownership.
 
-## 5. Address map (proposed initial map)
+## 6. Address map
 
-Use parameterized, non-overlapping address windows. Proposed defaults for a 32-bit address:
-
+Defaults for a 32-bit address:
 - S0: 0x0000_0000–0x0000_FFFF
 - S1: 0x0001_0000–0x0001_FFFF
 - Other addresses: decode error / defined error response
 
-These defaults must be implemented and tested; they are not yet validated RTL behavior.
+The routing blocks flag or withhold unmapped requests as appropriate to their individual interfaces. A complete top-level error responder is still required to return defined AXI error responses for unmapped transactions.
 
-## 6. Arbitration policies
+## 7. Arbitration policies
 
 ### Round-robin baseline
 - Select among eligible requesters in rotating order.
@@ -73,13 +84,13 @@ These defaults must be implemented and tested; they are not yet validated RTL be
 - Test continuous high-priority traffic against low-priority traffic.
 - If bounded starvation is a requirement, implement and verify a mechanism that supports the stated bound; do not infer it from priority arbitration alone.
 
-## 7. Forward progress and deadlock analysis
+## 8. Forward progress and deadlock analysis
 
 Progress claims require assumptions. For example, a test may assume every selected slave eventually asserts READY and eventually returns a response. Under those assumptions, properties can check that accepted transactions complete within a chosen bound. Separate tests must intentionally hold READY low to verify stable VALID/payload behavior and recovery after backpressure is released.
 
 Potential internal hazards include circular resource dependencies, lost grants, response misrouting, unmatched AW/W state, and blocked response paths. Each must have a corresponding test or assertion where practical.
 
-## 8. Performance measurement definitions
+## 9. Performance measurement definitions
 
 - **Request latency:** cycles from address-channel handshake to final response handshake. Report read and write latency separately.
 - **End-to-end latency:** cycles from address acceptance to final R beat or B response acceptance.
@@ -88,6 +99,6 @@ Potential internal hazards include circular resource dependencies, lost grants, 
 - **Fairness:** per-master service counts and a documented metric, such as Jain's fairness index, over a defined contention window.
 - **Starvation:** no service while continuously eligible, evaluated against the policy's explicit assumptions and bound.
 
-## 9. Definition of done
+## 10. Definition of done
 
 The design is complete only when the supported AXI subset is documented, compile/simulation commands are reproducible, directed and randomized tests pass, key assertions and coverage are exercised, and measured policy comparisons can be reproduced from saved configuration and seed information.
