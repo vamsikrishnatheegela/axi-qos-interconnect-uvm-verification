@@ -192,10 +192,65 @@ module axi_interconnect_2x2_smoke_tb;
         s_rvalid[0] = 0;
         s_rlast[0] = 0;
 
+        // Both masters now request S1 simultaneously. Hold S1 stalled to
+        // verify that the selected address and tagged ID remain stable.
+        @(negedge clk);
+        s_arready = 2'b00;
+        m_arvalid = 2'b11;
+        m_araddr[0] = 32'h0001_0010;
+        m_araddr[1] = 32'h0001_0020;
+        m_arid[0] = 4'h2;
+        m_arid[1] = 4'h4;
+        m_arlen = '0;
+        #1;
+        if (s_arvalid !== 2'b10 || s_arid[1] !== {1'b0, 4'h2} ||
+            s_araddr[1] !== 32'h0001_0010)
+            $fatal(1, "Concurrent AR contention did not select M0 for S1");
+        tick();
+        if (s_arvalid !== 2'b10 || s_arid[1] !== {1'b0, 4'h2} ||
+            s_araddr[1] !== 32'h0001_0010)
+            $fatal(1, "AR grant or payload changed during S1 backpressure");
+
+        // Accept M0's request; round-robin must then service M1.
+        s_arready[1] = 1;
+        tick();
+        m_arvalid[0] = 0;
+        #1;
+        if (s_arvalid !== 2'b10 || s_arid[1] !== {1'b1, 4'h4} ||
+            s_araddr[1] !== 32'h0001_0020)
+            $fatal(1, "AR round-robin did not service M1 after M0");
+        tick();
+        m_arvalid[1] = 0;
+        s_arready = 2'b00;
+
+        // Return the two single-beat responses with distinct master tags.
+        @(negedge clk);
+        s_rvalid[1] = 1;
+        s_rid[1] = {1'b0, 4'h2};
+        s_rdata[1] = 32'h0A0A_0002;
+        s_rresp[1] = 2'b00;
+        s_rlast[1] = 1;
+        #1;
+        if (!m_rvalid[0] || m_rid[0] !== 4'h2 ||
+            m_rdata[0] !== 32'h0A0A_0002 || !s_rready[1])
+            $fatal(1, "S1 response for M0 was misrouted");
+        tick();
+
+        @(negedge clk);
+        s_rid[1] = {1'b1, 4'h4};
+        s_rdata[1] = 32'h0B0B_0004;
+        #1;
+        if (!m_rvalid[1] || m_rid[1] !== 4'h4 ||
+            m_rdata[1] !== 32'h0B0B_0004 || !s_rready[1])
+            $fatal(1, "S1 response for M1 was misrouted");
+        tick();
+        s_rvalid[1] = 0;
+        s_rlast[1] = 0;
+
         if (m_aw_decode_error !== 2'b00 || m_ar_decode_error !== 2'b00)
             $fatal(1, "Unexpected decode error for mapped transactions");
 
-        $display("PASS: integrated two-beat AW/W/B and AR/R bursts, R backpressure stability, routing, and ID tag/restore");
+        $display("PASS: integrated multi-beat bursts, R backpressure, concurrent AR contention, response routing, and ID tag/restore");
         $finish;
     end
 endmodule
