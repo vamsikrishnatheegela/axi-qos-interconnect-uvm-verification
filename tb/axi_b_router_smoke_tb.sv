@@ -47,15 +47,17 @@ module axi_b_router_smoke_tb;
         s_bid[1] = {1'b0, 4'h7};
         m_bready = 2'b00;
         #1;
-        if (m_bvalid[0] !== 1'b1 || m_bid[0] !== 4'h6 ||
+        // Master 0's round-robin pointer advanced after the earlier
+        // accepted response from slave 0, so slave 1 wins this arbitration.
+        if (m_bvalid[0] !== 1'b1 || m_bid[0] !== 4'h7 ||
             s_bready !== 2'b00)
             $fatal(1, "B arbitration/backpressure failed");
         m_bready[0] = 1;
         tick();
-        s_bvalid[0] = 0;
+        s_bvalid[1] = 0;
         #1;
-        if (m_bvalid[0] !== 1'b1 || m_bid[0] !== 4'h7 ||
-            s_bready !== 2'b10)
+        if (m_bvalid[0] !== 1'b1 || m_bid[0] !== 4'h6 ||
+            s_bready !== 2'b01)
             $fatal(1, "B arbiter did not serve waiting slave");
         $display("PASS: B response routing, ID restoration, concurrency, and backpressure");
         $finish;
