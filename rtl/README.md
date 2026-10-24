@@ -3,23 +3,26 @@
 ## Implemented building blocks
 
 - `axi4_if.sv`: parameterized AXI4 channel interface.
-- `rr_arbiter.sv`: round-robin arbiter; pointer advances on the configured acceptance event.
+- `rr_arbiter.sv`: round-robin arbiter.
 - `axi_address_decoder.sv`: two-window address decoder.
 - `axi_ar_router_2x2.sv`: read-address routing with arbitration and ID tagging.
 - `axi_r_router_2x2.sv`: read-response routing, ID restoration, and burst ownership.
 - `axi_aw_router_2x2.sv`: write-address routing with arbitration and ID tagging.
 - `axi_w_router_2x2.sv`: write-data routing with destination tracking, backpressure, and WLAST-based burst ownership.
 - `axi_b_router_2x2.sv`: write-response routing and ID restoration.
+- `axi_interconnect_2x2.sv`: integrated 2-master × 2-slave routing fabric for AW/W/B and AR/R.
 
-## W-router contract and current limitation
+## Current integration contract and limitations
 
-The first W-router version supports **one outstanding write burst per master**. It records the destination when the corresponding AW handshake is reported via `m_aw_fire`, and blocks a new AW while that burst is active through `m_aw_block`. The top-level integration must use `m_aw_block` to suppress AWVALID, and drive `m_aw_fire` from the actual AW handshake. W data is not forwarded before the AW handshake. Once a W burst starts, ownership remains fixed until an accepted WLAST. There is no internal W-data FIFO.
+The integrated W path supports **one outstanding write burst per master**. The top-level gates AW requests while that master has an accepted AW whose W burst has not completed. The W router captures the destination on the AW handshake, waits for that acceptance before forwarding W, and releases the slot on an accepted WLAST. W payload is not buffered internally.
 
-The router blocks are not yet a complete integrated interconnect. Decode-error response generation, top-level wiring, end-to-end transaction testing, QoS arbitration, and UVM verification remain to be implemented.
+Downstream IDs have one extra master-tag bit. The response routers use that tag to return B/R responses to the correct master and strip the tag before exposing the original ID.
 
-## Directed smoke tests
+Unmapped AW/AR requests are exposed through decode-error outputs and are not accepted by the address routers. A complete AXI DECERR response path is not yet implemented. The integrated smoke test exercises mapped, single-beat transactions; it does not prove full AXI4 compliance or multi-beat end-to-end behavior.
 
-Run individual module tests from the repository root:
+## Directed tests
+
+Run from the repository root:
 
 ```bash
 bash scripts/run_rtl_smoke.sh
@@ -28,7 +31,7 @@ bash scripts/run_r_router_smoke.sh
 bash scripts/run_aw_router_smoke.sh
 bash scripts/run_w_router_smoke.sh
 bash scripts/run_b_router_smoke.sh
+bash scripts/run_interconnect_smoke.sh
 ```
 
-These tests cover selected directed cases only; passing them does not establish full AXI4 compliance.
-
+These are directed smoke tests. Passing them does not establish complete AXI4 compliance.
