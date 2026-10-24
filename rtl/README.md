@@ -18,7 +18,7 @@ The integrated W path supports **one outstanding write burst per master**. The t
 
 Downstream IDs have one extra master-tag bit. The response routers use that tag to return B/R responses to the correct master and strip the tag before exposing the original ID.
 
-Unmapped AW/AR requests are exposed through decode-error outputs and are not accepted by the address routers. A complete AXI DECERR response path is not yet implemented. The integrated smoke test exercises mapped, single-beat transactions; it does not prove full AXI4 compliance or multi-beat end-to-end behavior.
+Unmapped AW/AR requests are exposed through decode-error outputs and are not accepted by the address routers. A complete AXI DECERR response path is not yet implemented. The integrated smoke test now exercises mapped two-beat read/write bursts and R-channel backpressure stability. It remains a directed test and does not prove full AXI4 compliance.
 
 ## Directed tests
 
@@ -34,4 +34,4 @@ bash scripts/run_b_router_smoke.sh
 bash scripts/run_interconnect_smoke.sh
 ```
 
-These are directed smoke tests. Passing them does not establish complete AXI4 compliance.
+The six individual smoke tests and the initial integrated smoke test passed in the user's local environment. The strengthened multi-beat integration test must be run locally after pulling the latest commit. Passing directed smoke tests does not establish complete AXI4 compliance.
