@@ -14,7 +14,7 @@ module axi_ar_router_smoke_tb;
     logic [1:0][2:0] m_arprot;
 
     logic [1:0] s_arvalid, s_arready;
-    logic [1:0][3:0] s_arid;
+    logic [1:0][4:0] s_arid;
     logic [1:0][31:0] s_araddr;
     logic [1:0][7:0] s_arlen;
     logic [1:0][2:0] s_arsize;
@@ -50,7 +50,7 @@ module axi_ar_router_smoke_tb;
         m_arid[0] = 4'hA;
         m_araddr[0] = 32'h0000_0010;
         #1;
-        if (s_arvalid[0] !== 1 || s_arid[0] !== 4'hA)
+        if (s_arvalid[0] !== 1 || s_arid[0] !== {1'b0, 4'hA})
             $fatal(1, "S0 failed to route master 0 request");
 
         m_arvalid[1] = 1;
@@ -65,7 +65,7 @@ module axi_ar_router_smoke_tb;
         tick();
         m_arvalid[0] = 0;
         #1;
-        if (s_arvalid[0] !== 1 || s_arid[0] !== 4'hB)
+        if (s_arvalid[0] !== 1 || s_arid[0] !== {1'b1, 4'hB})
             $fatal(1, "S0 did not grant waiting master after accepted transfer");
 
         tick();
@@ -80,7 +80,7 @@ module axi_ar_router_smoke_tb;
         m_arid[0] = 4'h1;
         m_arid[1] = 4'h2;
         #1;
-        if (s_arvalid !== 2'b11 || s_arid[0] !== 4'h1 || s_arid[1] !== 4'h2)
+        if (s_arvalid !== 2'b11 || s_arid[0] !== {1'b0, 4'h1} || s_arid[1] !== {1'b1, 4'h2})
             $fatal(1, "Independent S0/S1 routing failed");
 
         // Out-of-map address must be flagged and must not be routed.
