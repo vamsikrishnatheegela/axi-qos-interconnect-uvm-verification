@@ -1,57 +1,63 @@
 # AXI QoS Interconnect with UVM Verification
 
-Design and UVM-based verification of a multi-master, multi-slave AXI4 interconnect featuring QoS-aware arbitration, configurable priorities, independent read/write routing, backpressure handling, fairness analysis, and latency/throughput benchmarking.
+A staged RTL and verification project for a 2-master × 2-slave AXI4 memory-mapped interconnect, with a planned comparison between round-robin and QoS-aware arbitration.
 
-> **Project status:** Planning and repository setup. RTL and UVM components will be added and validated incrementally. No test or performance result is claimed until it has been run and recorded.
+> **Current status:** Channel router RTL and an integrated top-level have been added. Six channel/decoder smoke tests have passed in the user's local environment. The integrated end-to-end smoke test has been added but must still be run locally. No QoS, UVM, or performance result is claimed.
 
 ## Objectives
 
-- Build a parameterized **2-master × 2-slave AXI4** interconnect as the initial configuration.
-- Implement address decoding, read/write channel routing, response routing, and legal handling of AXI VALID/READY backpressure.
-- Compare round-robin arbitration with a configurable QoS-aware policy.
-- Develop a reusable SystemVerilog/UVM environment with agents, sequences, monitors, assertions, a reference model, scoreboard, and functional coverage.
-- Measure latency, throughput, fairness, and forward progress using reproducible workloads.
-- Document design decisions, simulator commands, test outcomes, limitations, and results.
+- Route independent AXI4 AW/W/B and AR/R channels.
+- Preserve master identity through tagged downstream transaction IDs.
+- Handle VALID/READY backpressure and maintain write-burst ownership.
+- Define decode-error behavior, outstanding limits, and supported protocol subset.
+- Add UVM verification, assertions, coverage, and reproducible latency/throughput/fairness analysis.
+- Compare round-robin against a documented QoS-aware policy.
 
-## Initial scope and assumptions
+## Current implementation
 
-- Protocol target: **AXI4 memory-mapped**, not AXI-Lite and not AXI3.
-- Initial topology: 2 masters and 2 slaves; parameters should permit future scaling.
-- Independent read and write channel paths, subject to resource conflicts and the chosen outstanding-transaction policy.
-- The initial implementation will explicitly define supported burst types, data/address widths, ID widths, address map, maximum outstanding transactions, and error response behavior.
-- QoS policy must define tie-breaking and starvation behavior; priority alone is not a fairness guarantee.
-- Deadlock checks will state environmental assumptions. A slave that holds READY low forever can prevent progress and must not be misreported as an internal deadlock.
+- 2 masters × 2 slaves.
+- Default S0 address window: `0x0000_0000–0x0000_FFFF`.
+- Default S1 address window: `0x0001_0000–0x0001_FFFF`.
+- Downstream IDs contain one extra master-tag bit; response routing strips it.
+- One outstanding write burst per master, enforced by the integrated top-level.
+- Unmapped addresses are flagged and not accepted; a full DECERR response path remains future work.
+- Full multi-beat end-to-end verification, randomized tests, QoS arbitration, and UVM are not yet complete.
+
+## Run the directed tests
+
+From the repository root:
+
+```bash
+bash scripts/run_rtl_smoke.sh
+bash scripts/run_ar_router_smoke.sh
+bash scripts/run_r_router_smoke.sh
+bash scripts/run_aw_router_smoke.sh
+bash scripts/run_w_router_smoke.sh
+bash scripts/run_b_router_smoke.sh
+bash scripts/run_interconnect_smoke.sh
+```
+
+The first six smoke tests have passed locally. Run the final integration test before recording an integrated result.
 
 ## Repository map
 
 ```text
-rtl/                  Synthesizable RTL and packages
-tb/                   SystemVerilog/UVM testbench
-  agents/              AXI master/slave agents
-  env/                 Environment, virtual sequencer, scoreboard
-  sequences/            Directed and constrained-random sequences
-  tests/                UVM tests
-assertions/            Protocol and forward-progress properties
-docs/                  Architecture, verification plan, results
-scripts/               Reproducible compile/run/regression helpers
-results/               Generated logs and reports (not committed by default)
+rtl/          RTL modules and AXI4 interface
+tb/           Directed smoke tests; UVM environment is planned
+assertions/   Protocol and forward-progress properties (planned)
+docs/         Architecture, verification plan, toolchain notes
+scripts/      Reproducible compile/run scripts
+results/      Measured logs/reports; do not invent or estimate results
 ```
 
-## Planned milestones
+## Verification and results policy
 
-1. Freeze interface, address map, and supported AXI subset.
-2. Compile interface/package skeleton with the selected simulator.
-3. Implement and unit-test address decode and channel routing.
-4. Add round-robin arbitration and baseline directed tests.
-5. Add QoS arbitration and policy-specific tests.
-6. Build UVM agents, sequences, monitors, scoreboard, and assertions.
-7. Add coverage closure and stress tests for backpressure, bursts, IDs, and reset.
-8. Add performance instrumentation and compare policies using the same traffic seeds.
-9. Publish validated results, waveforms, and known limitations.
+Only record results after a reproducible simulation run. A passing smoke test covers selected scenarios and does not establish full AXI4 compliance.
 
-## Toolchain
-
-The exact simulator and UVM version will be recorded in [Toolchain Notes](docs/toolchain.md). Simulator compatibility is not assumed: compile commands and supported language features will be chosen after checking the available installation.
+| Policy | Tests passed | Functional coverage | Mean latency | Max observed latency | Throughput | Fairness |
+|---|---:|---:|---:|---:|---:|---:|
+| Round-robin | TBD | TBD | TBD | TBD | TBD | TBD |
+| QoS-aware | TBD | TBD | TBD | TBD | TBD | TBD |
 
 ## Documentation
 
@@ -61,15 +67,6 @@ The exact simulator and UVM version will be recorded in [Toolchain Notes](docs/t
 - [RTL status](rtl/README.md)
 - [UVM testbench status](tb/README.md)
 
-## Results policy
-
-Only measured results from reproducible runs belong in the results table. Until implementation and simulations are complete, metrics are **TBD** rather than estimated or invented.
-
-| Policy | Tests passed | Functional coverage | Mean latency | Max observed latency | Throughput | Fairness |
-|---|---:|---:|---:|---:|---:|---:|
-| Round-robin | TBD | TBD | TBD | TBD | TBD | TBD |
-| QoS-aware | TBD | TBD | TBD | TBD | TBD | TBD |
-
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See `LICENSE`.
