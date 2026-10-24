@@ -52,7 +52,7 @@ module axi_ar_router_2x2 #(
     integer s;
 
     // Decode each master's address to one of the two configured windows.
-    always_comb begin
+    always @* begin
         for (integer i = 0; i < 2; i = i + 1) begin
             decoded_slave[i] = 2'b00;
             decode_error[i] = 1'b0;
@@ -65,7 +65,7 @@ module axi_ar_router_2x2 #(
         end
     end
 
-    always_comb begin
+    always @* begin
         request[0] = 2'b00;
         request[1] = 2'b00;
         for (integer i = 0; i < 2; i = i + 1) begin
@@ -115,7 +115,7 @@ module axi_ar_router_2x2 #(
         end
     end
 
-    always_comb begin
+    always @* begin
         m_arready = 2'b00;
         s_arvalid = grant_valid;
         s_arid = '0;
