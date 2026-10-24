@@ -37,9 +37,14 @@ module axi_r_router_2x2 #(
     always @* begin
         request[0] = 2'b00;
         request[1] = 2'b00;
-        for (integer s = 0; s < 2; s = s + 1) begin
-            if (s_rvalid[s])
-                request[s_rid[s][ID_W]][s] = 1'b1;
+        // Explicit static indexing keeps this compatible with Icarus Verilog.
+        if (s_rvalid[0]) begin
+            if (s_rid[0][ID_W]) request[1][0] = 1'b1;
+            else                request[0][0] = 1'b1;
+        end
+        if (s_rvalid[1]) begin
+            if (s_rid[1][ID_W]) request[1][1] = 1'b1;
+            else                request[0][1] = 1'b1;
         end
         for (integer m = 0; m < 2; m = m + 1) begin
             arb_req[m] = request[m];
@@ -98,14 +103,24 @@ module axi_r_router_2x2 #(
         m_rresp = '0;
         m_rlast = '0;
 
+        // Use constant-index branches for packed multidimensional buses.
         for (integer m = 0; m < 2; m = m + 1) begin
             if (grant_valid[m]) begin
-                m_rvalid[m] = s_rvalid[grant_idx[m]];
-                m_rid[m] = s_rid[grant_idx[m]][ID_W-1:0];
-                m_rdata[m] = s_rdata[grant_idx[m]];
-                m_rresp[m] = s_rresp[grant_idx[m]];
-                m_rlast[m] = s_rlast[grant_idx[m]];
-                s_rready[grant_idx[m]] = m_rready[m];
+                if (grant_idx[m] == 1'b0) begin
+                    m_rvalid[m] = s_rvalid[0];
+                    m_rid[m] = s_rid[0][ID_W-1:0];
+                    m_rdata[m] = s_rdata[0];
+                    m_rresp[m] = s_rresp[0];
+                    m_rlast[m] = s_rlast[0];
+                    s_rready[0] = m_rready[m];
+                end else begin
+                    m_rvalid[m] = s_rvalid[1];
+                    m_rid[m] = s_rid[1][ID_W-1:0];
+                    m_rdata[m] = s_rdata[1];
+                    m_rresp[m] = s_rresp[1];
+                    m_rlast[m] = s_rlast[1];
+                    s_rready[1] = m_rready[m];
+                end
             end
         end
     end
