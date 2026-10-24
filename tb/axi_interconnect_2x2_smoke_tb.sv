@@ -100,10 +100,11 @@ module axi_interconnect_2x2_smoke_tb;
         rst_n = 1;
         @(negedge clk);
 
-        // M0 writes one beat to S1. Verify route and master-tagged AWID.
+        // M0 writes a two-beat burst to S1. Verify route and master-tagged AWID.
         m_awvalid[0] = 1;
         m_awid[0] = 4'h3;
         m_awaddr[0] = 32'h0001_0020;
+        m_awlen[0] = 8'd1;
         #1;
         if (!m_awready[0] || s_awvalid !== 2'b10 ||
             s_awaddr[1] !== 32'h0001_0020 || s_awid[1] !== 5'b00011)
@@ -111,15 +112,24 @@ module axi_interconnect_2x2_smoke_tb;
         tick();
         m_awvalid[0] = 0;
 
-        // W must reach the same destination and preserve payload.
+        // First W beat: non-final beat must stay on S1.
         m_wvalid[0] = 1;
         m_wdata[0] = 32'hCAFE_BABE;
         m_wstrb[0] = 4'hF;
-        m_wlast[0] = 1;
+        m_wlast[0] = 0;
         #1;
         if (s_wvalid !== 2'b10 || s_wdata[1] !== 32'hCAFE_BABE ||
+            !m_wready[0] || s_wlast[1])
+            $fatal(1, "Integrated first W beat route/payload failed");
+        tick();
+
+        // Second W beat completes the burst and releases the write slot.
+        m_wdata[0] = 32'hDEAD_BEEF;
+        m_wlast[0] = 1;
+        #1;
+        if (s_wvalid !== 2'b10 || s_wdata[1] !== 32'hDEAD_BEEF ||
             !m_wready[0] || !s_wlast[1])
-            $fatal(1, "Integrated W route or payload failed");
+            $fatal(1, "Integrated final W beat route/payload failed");
         tick();
         m_wvalid[0] = 0;
         m_wlast[0] = 0;
@@ -137,11 +147,12 @@ module axi_interconnect_2x2_smoke_tb;
         tick();
         s_bvalid[1] = 0;
 
-        // M1 reads one beat from S0. Verify route and tagged ARID.
+        // M1 reads a two-beat burst from S0. Verify route and tagged ARID.
         @(negedge clk);
         m_arvalid[1] = 1;
         m_arid[1] = 4'h9;
         m_araddr[1] = 32'h0000_0040;
+        m_arlen[1] = 8'd1;
         #1;
         if (!m_arready[1] || s_arvalid !== 2'b01 ||
             s_araddr[0] !== 32'h0000_0040 || s_arid[0] !== 5'b11001)
@@ -149,17 +160,34 @@ module axi_interconnect_2x2_smoke_tb;
         tick();
         m_arvalid[1] = 0;
 
-        // Return R from S0 with M1 tag and verify original ID/data.
+        // First R beat is stalled at the master. VALID/payload must hold stable.
         @(negedge clk);
         s_rvalid[0] = 1;
         s_rid[0] = 5'b11001;
         s_rdata[0] = 32'h1234_5678;
         s_rresp[0] = 2'b00;
+        s_rlast[0] = 0;
+        m_rready[1] = 0;
+        #1;
+        if (!m_rvalid[1] || m_rid[1] !== 4'h9 ||
+            m_rdata[1] !== 32'h1234_5678 || m_rlast[1] ||
+            s_rready[0])
+            $fatal(1, "Integrated first R beat or backpressure failed");
+        tick();
+        if (!m_rvalid[1] || m_rid[1] !== 4'h9 ||
+            m_rdata[1] !== 32'h1234_5678 || m_rlast[1])
+            $fatal(1, "R payload changed while stalled");
+        m_rready[1] = 1;
+        tick();
+
+        // Second R beat must remain routed to M1 and complete the burst.
+        @(negedge clk);
+        s_rdata[0] = 32'h8765_4321;
         s_rlast[0] = 1;
         #1;
         if (!m_rvalid[1] || m_rid[1] !== 4'h9 ||
-            m_rdata[1] !== 32'h1234_5678 || !m_rlast[1])
-            $fatal(1, "Integrated R response or ID restoration failed");
+            m_rdata[1] !== 32'h8765_4321 || !m_rlast[1])
+            $fatal(1, "Integrated final R beat or burst ownership failed");
         tick();
         s_rvalid[0] = 0;
         s_rlast[0] = 0;
@@ -167,7 +195,7 @@ module axi_interconnect_2x2_smoke_tb;
         if (m_aw_decode_error !== 2'b00 || m_ar_decode_error !== 2'b00)
             $fatal(1, "Unexpected decode error for mapped transactions");
 
-        $display("PASS: integrated AW/W/B and AR/R paths, destination routing, and ID tag/restore");
+        $display("PASS: integrated two-beat AW/W/B and AR/R bursts, R backpressure stability, routing, and ID tag/restore");
         $finish;
     end
 endmodule
