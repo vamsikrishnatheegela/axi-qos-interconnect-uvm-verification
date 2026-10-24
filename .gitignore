@@ -1,0 +1,37 @@
+# Editor / OS
+*~
+*.swp
+*.swo
+.DS_Store
+.vscode/
+
+# Simulation products
+work/
+transcript
+vsim.wlf
+*.vcd
+*.fst
+*.vpd
+*.fsdb
+*.shm/
+*.ucdb
+*.wdb
+*.log
+*.jou
+*.pb
+*.history
+csrc/
+simv
+simv.daidir/
+INCA_libs/
+xcelium.d/
+questa_lib/
+modelsim.ini
+*.key
+*.lic
+
+# Generated build/results (keep hand-written docs and scripts)
+build/
+results/raw/
+results/reports/
+coverage/
