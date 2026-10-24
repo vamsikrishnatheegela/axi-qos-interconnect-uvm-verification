@@ -2,18 +2,15 @@
 
 ## 1. Goal
 
-Implement a multi-master, multi-slave AXI4 memory-mapped interconnect and compare round-robin service against QoS-aware arbitration. Correctness and reproducibility take priority over premature optimization.
+Implement a 2-master × 2-slave AXI4 memory-mapped interconnect, then compare round-robin arbitration with a QoS-aware policy using reproducible tests and measurements.
 
-## 2. Initial topology
+## 2. Topology and channel paths
 
-- 2 AXI masters: M0 and M1.
-- 2 AXI slaves: S0 and S1.
-- Independent AXI read path: AR/R.
-- Independent AXI write path: AW/W/B.
-- Address decoder selects a destination from the accepted address.
-- Response routing associates each response with the originating master.
-
-The topology is the first configuration, not a claim that the implementation is already parameterized or complete.
+- Masters: M0 and M1.
+- Slaves: S0 and S1.
+- Read path: AR request routing and R response routing.
+- Write path: AW request routing, W data routing, and B response routing.
+- The address map selects the destination; the master-tag bit in downstream IDs associates responses with the originating master.
 
 ## 3. AXI4 channel contract
 
@@ -27,78 +24,71 @@ AXI4 has five independent channels:
 | AR | Master to interconnect/slave | Read address and control |
 | R | Slave to master | Read data, response, burst-last |
 
-A transfer occurs only on a rising clock edge where VALID and READY are both asserted. A source must hold VALID and payload stable while VALID=1 and READY=0. Channel independence must be preserved; AW and W may arrive in different cycles.
+A transfer occurs on a rising clock edge when VALID and READY are both asserted. A source must hold VALID and payload stable while VALID=1 and READY=0. AW and W may arrive in different cycles; the interconnect must not assume they handshake together.
 
-## 4. Current RTL scope and integration contract
+## 4. Current RTL scope
 
-The repository currently contains independently tested decoder/arbitration and AR, R, AW, W, and B routing blocks. These are building blocks, not yet an integrated interconnect.
+The repository contains independently smoke-tested decoder/arbitration and AR, R, AW, W, and B routers, plus an integrated `axi_interconnect_2x2` module. The integrated smoke test is intended to check mapped, single-beat read and write transactions and ID tag/restore across the complete paths. Local simulation results must be recorded only after the user runs the supplied script.
 
-The initial W router intentionally limits each master to **one outstanding write burst**:
-- The top-level reports each accepted AW handshake to the W router using `m_aw_fire` and supplies the accepted address.
-- The W router records the selected destination and asserts `m_aw_block` until the final W beat handshakes.
-- The top-level must suppress further AW requests from a blocked master. Do not connect `m_aw_block` only to a status signal; it must actually gate the AW request path.
-- W data is held off until the matching AW has been accepted.
-- Once a W burst begins, its master owns that destination until an accepted WLAST. W payload is not buffered internally.
-- The design assumes AXI-compliant masters hold WVALID and payload stable while stalled.
+### Write outstanding policy
 
-This policy is deliberately restrictive; a FIFO-based AW/W association mechanism is required before allowing multiple outstanding write bursts per master.
+The initial W router supports **one outstanding write burst per master**:
+- `m_aw_block` gates new AW requests for a master until its accepted WLAST.
+- The W router records the destination on the accepted AW handshake.
+- W is not forwarded until the corresponding AW has been accepted.
+- Ownership remains fixed from the first routed W beat through an accepted WLAST.
+- The W router has no internal W-data FIFO and assumes compliant masters hold WVALID and payload stable during stalls.
 
-## 5. Remaining design decisions
+A FIFO-based AW/W association mechanism is required before supporting multiple outstanding write bursts per master.
 
-The following choices must be recorded in RTL parameters or a specification before full integration:
+### ID mapping
 
-- Clock/reset polarity and reset behavior.
-- Address width, data width, ID width, and maximum burst length.
-- Supported burst types and alignment rules.
-- Address windows for S0 and S1, including unmapped-address behavior.
-- Maximum outstanding reads and writes per master and per slave.
-- Ordering guarantees and ID preservation/remapping policy.
-- QoS input interpretation, priority encoding, tie-breaking, and starvation policy.
-- Backpressure buffering and any timing isolation/skid buffers.
-- Error response behavior for invalid addresses.
-- Reset treatment for in-flight transactions.
+Master-side IDs are `ID_W` bits. Address routers prepend the originating master bit, creating a downstream `ID_W+1`-bit ID. Response routers use the extra tag bit to route the response and return the original `ID_W`-bit ID to the master. The system-level contract assumes slaves preserve the downstream ID in their response.
 
-Do not silently assume that an AXI4 transaction may be arbitrated beat-by-beat between different masters. Once a burst is granted to a destination, the design must preserve the required burst integrity and ownership.
+### Decode misses
 
-## 6. Address map
+The address routers flag unmapped addresses and do not accept them. The integrated top-level exposes `m_aw_decode_error` and `m_ar_decode_error`, but does not yet generate a complete AXI DECERR response. Tests should currently use mapped addresses unless testing this limitation explicitly.
 
-Defaults for a 32-bit address:
+## 5. Address map
+
+Default 32-bit windows:
 - S0: 0x0000_0000–0x0000_FFFF
 - S1: 0x0001_0000–0x0001_FFFF
-- Other addresses: decode error / defined error response
+- Other addresses: flagged decode error; DECERR response generation remains future work.
 
-The routing blocks flag or withhold unmapped requests as appropriate to their individual interfaces. A complete top-level error responder is still required to return defined AXI error responses for unmapped transactions.
-
-## 7. Arbitration policies
+## 6. Arbitration
 
 ### Round-robin baseline
 - Select among eligible requesters in rotating order.
-- Advance the round-robin pointer according to the documented grant/acceptance event.
-- Preserve a grant while required by the channel protocol and burst ownership.
-- Define behavior when a selected requester withdraws a request before acceptance.
+- Advance priority on the documented acceptance event.
+- Preserve selected ownership where required by channel backpressure or burst integrity.
 
-### QoS-aware policy
-- Use the configured AXI QoS field and/or programmable requester priority.
-- Specify whether arbitration is strict priority, weighted service, or priority plus aging.
-- Define tie-breaking and when priority is sampled.
-- Test continuous high-priority traffic against low-priority traffic.
-- If bounded starvation is a requirement, implement and verify a mechanism that supports the stated bound; do not infer it from priority arbitration alone.
+### Planned QoS-aware policy
+- Define whether arbitration is strict priority, weighted service, or priority plus aging.
+- Specify how AXI QoS is sampled and how ties are broken.
+- Test persistent high-priority traffic against low-priority traffic.
+- Do not claim bounded starvation without a mechanism and a testable bound.
 
-## 8. Forward progress and deadlock analysis
+## 7. Forward progress and deadlock analysis
 
-Progress claims require assumptions. For example, a test may assume every selected slave eventually asserts READY and eventually returns a response. Under those assumptions, properties can check that accepted transactions complete within a chosen bound. Separate tests must intentionally hold READY low to verify stable VALID/payload behavior and recovery after backpressure is released.
+Progress claims require environmental assumptions. For example, assume selected slaves eventually assert READY and return responses. Test both persistent backpressure and recovery after READY is released. Check for lost grants, response misrouting, unmatched AW/W state, and blocked response paths.
 
-Potential internal hazards include circular resource dependencies, lost grants, response misrouting, unmatched AW/W state, and blocked response paths. Each must have a corresponding test or assertion where practical.
+## 8. Performance definitions
 
-## 9. Performance measurement definitions
-
-- **Request latency:** cycles from address-channel handshake to final response handshake. Report read and write latency separately.
+- **Request latency:** cycles from address-channel handshake to final response handshake.
 - **End-to-end latency:** cycles from address acceptance to final R beat or B response acceptance.
-- **Throughput:** completed payload bytes per cycle and transactions per cycle; state which is reported.
-- **Maximum observed latency:** maximum in the finite measured run, not automatically a formal worst-case bound.
-- **Fairness:** per-master service counts and a documented metric, such as Jain's fairness index, over a defined contention window.
-- **Starvation:** no service while continuously eligible, evaluated against the policy's explicit assumptions and bound.
+- **Throughput:** completed payload bytes per cycle and/or transactions per cycle.
+- **Maximum observed latency:** maximum in a finite measured run, not automatically a formal worst-case bound.
+- **Fairness:** per-master service counts and a documented metric over a defined contention window.
+- **Starvation:** no service while continuously eligible, evaluated under explicit assumptions and policy bounds.
 
-## 10. Definition of done
+## 9. Remaining work
 
-The design is complete only when the supported AXI subset is documented, compile/simulation commands are reproducible, directed and randomized tests pass, key assertions and coverage are exercised, and measured policy comparisons can be reproduced from saved configuration and seed information.
+1. Run and debug the integrated smoke test in the target simulator.
+2. Add multi-beat end-to-end tests, concurrent master traffic, response backpressure, and reset cases.
+3. Add defined DECERR responses for unmapped addresses.
+4. Add protocol assertions and randomized testing.
+5. Implement QoS-aware arbitration and compare it with the round-robin baseline.
+6. Add UVM agents, scoreboard, functional coverage, and reproducible performance measurements.
+
+Passing directed smoke tests is useful evidence, but is not equivalent to full AXI4 protocol compliance.
