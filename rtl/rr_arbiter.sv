@@ -17,7 +17,7 @@ module rr_arbiter #(
     integer k;
     logic found;
 
-    always_comb begin
+    always @* begin
         grant       = '0;
         grant_valid = 1'b0;
         grant_idx   = '0;
