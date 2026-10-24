@@ -29,7 +29,7 @@ module axi_ar_router_2x2 #(
 
     output logic [1:0] s_arvalid,
     input  logic [1:0] s_arready,
-    output logic [1:0][ID_W-1:0] s_arid,
+    output logic [1:0][ID_W:0] s_arid,
     output logic [1:0][ADDR_W-1:0] s_araddr,
     output logic [1:0][LEN_W-1:0] s_arlen,
     output logic [1:0][SIZE_W-1:0] s_arsize,
@@ -129,7 +129,7 @@ module axi_ar_router_2x2 #(
 
         for (integer j = 0; j < 2; j = j + 1) begin
             if (grant_valid[j]) begin
-                s_arid[j] = m_arid[grant_idx[j]];
+                s_arid[j] = {grant_idx[j], m_arid[grant_idx[j]]};
                 s_araddr[j] = m_araddr[grant_idx[j]];
                 s_arlen[j] = m_arlen[grant_idx[j]];
                 s_arsize[j] = m_arsize[grant_idx[j]];
