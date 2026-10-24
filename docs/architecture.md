@@ -28,7 +28,7 @@ A transfer occurs on a rising clock edge when VALID and READY are both asserted.
 
 ## 4. Current RTL scope
 
-The repository contains independently smoke-tested decoder/arbitration and AR, R, AW, W, and B routers, plus an integrated `axi_interconnect_2x2` module. The integrated smoke test is intended to check mapped, single-beat read and write transactions and ID tag/restore across the complete paths. Local simulation results must be recorded only after the user runs the supplied script.
+The repository contains independently smoke-tested decoder/arbitration and AR, R, AW, W, and B routers, plus an integrated `axi_interconnect_2x2` module. The strengthened integration test is designed to exercise mapped two-beat read/write bursts, response ID tag/restore, and R-channel backpressure stability. Record the result only after running the script locally.
 
 ### Write outstanding policy
 
@@ -84,8 +84,8 @@ Progress claims require environmental assumptions. For example, assume selected 
 
 ## 9. Remaining work
 
-1. Run and debug the integrated smoke test in the target simulator.
-2. Add multi-beat end-to-end tests, concurrent master traffic, response backpressure, and reset cases.
+1. Run and debug the strengthened integrated multi-beat smoke test locally.
+2. Add simultaneous master traffic, multi-slave response contention, more response-backpressure cases, and reset tests.
 3. Add defined DECERR responses for unmapped addresses.
 4. Add protocol assertions and randomized testing.
 5. Implement QoS-aware arbitration and compare it with the round-robin baseline.
